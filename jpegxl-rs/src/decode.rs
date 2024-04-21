@@ -493,6 +493,36 @@ impl<'pr, 'mm> JxlDecoder<'pr, 'mm> {
             },
         ))
     }
+
+    /// Reconstruct JPEG data. Fallback to pixels in a specific pixel type if JPEG reconstruction fails
+    ///
+    /// # Note
+    /// You can reconstruct JPEG data or get pixels in one go
+    ///
+    /// # Errors
+    /// Return a [`DecodeError`] when internal decoder fails
+    pub fn reconstruct_with<T: PixelType>(&self, data: &[u8]) -> Result<(Metadata, Data), DecodeError> {
+        let mut buffer = vec![];
+        let mut pixel_format = MaybeUninit::uninit();
+        let mut jpeg_buf = vec![];
+        let metadata = self.decode_internal(
+            data,
+            Some(T::pixel_type()),
+            self.icc_profile,
+            Some(&mut jpeg_buf),
+            pixel_format.as_mut_ptr(),
+            &mut buffer,
+        )?;
+
+        Ok((
+            metadata,
+            if jpeg_buf.is_empty() {
+                Data::Pixels(Pixels::new(buffer, unsafe { &pixel_format.assume_init() }))
+            } else {
+                Data::Jpeg(jpeg_buf)
+            },
+        ))
+    }
 }
 
 impl<'prl, 'mm> Drop for JxlDecoder<'prl, 'mm> {
